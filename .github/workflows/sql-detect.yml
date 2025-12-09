@@ -1,4 +1,4 @@
-name: SQL DELETE Detector
+name: Detect DELETE in SQL (No Git Diff)
 
 on:
   pull_request:
@@ -9,40 +9,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Detect DELETE in SQL using GitHub API
+        id: detect
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0   # IMPORTANT
+          script: |
+            const prNumber = context.payload.pull_request.number;
 
-      - name: Fetch base branch
-        run: |
-          git fetch origin ${{ github.base_ref }}
+            // Get changed files from the PR
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
 
-      - name: Detect changed SQL
-        id: scan
-        run: |
-          # Fetch base branch (main or whatever PR targets)
-          git fetch origin ${{ github.base_ref }}
-      
-          # Compare PR branch changes to base branch
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -Ei '\.sql$' || true)
-      
-          echo "Changed SQL files:"
-          echo "$CHANGED"
-      
-          if [ -z "$CHANGED" ]; then
-            echo "delete_found=no" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-      
-          if git diff origin/${{ github.base_ref }}...HEAD -- $CHANGED | grep -iq "delete"; then
-            echo "delete_found=yes" >> $GITHUB_OUTPUT
-          else
-            echo "delete_found=no" >> $GITHUB_OUTPUT
-          fi
+            let deleteFound = false;
 
-      - name: Add label if DELETE found
-        if: steps.scan.outputs.delete_found == 'yes'
+            for (const file of files.data) {
+              // Only check .sql files
+              if (file.filename.endsWith(".sql")) {
+                const patch = file.patch || "";
+
+                // Look for DELETE statements in the patch
+                if (/delete/i.test(patch)) {
+                  deleteFound = true;
+                  break;
+                }
+              }
+            }
+
+            core.setOutput("delete_found", deleteFound ? "yes" : "no");
+
+      - name: Add label if DELETE FOUND
+        if: steps.detect.outputs.delete_found == 'yes'
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: "requires-secondary-approval"
