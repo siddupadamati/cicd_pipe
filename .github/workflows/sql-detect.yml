@@ -2,7 +2,7 @@ name: SQL DELETE Detector
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   detect-delete:
@@ -11,24 +11,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # IMPORTANT
 
-      - name: Scan SQL files for DELETE
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}
+
+      - name: Detect changed SQL files
         id: scan
         run: |
-          CHANGED=$(git diff --name-only ${{ github.base_ref }} | grep -Ei '\.sql$' || true)
+          # List changed SQL files between PR branch and base
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -Ei '\.sql$' || true)
+
+          echo "Changed SQL files:"
+          echo "$CHANGED"
 
           if [ -z "$CHANGED" ]; then
             echo "delete_found=no" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          if git diff origin/${{ github.base_ref }} -- $CHANGED | grep -i "delete"; then
+          # Detect DELETE statements
+          if git diff origin/${{ github.base_ref }}...HEAD -- $CHANGED | grep -iq "delete"; then
             echo "delete_found=yes" >> $GITHUB_OUTPUT
           else
             echo "delete_found=no" >> $GITHUB_OUTPUT
           fi
 
-      - name: Label PR if DELETE found
+      - name: Add label if DELETE found
         if: steps.scan.outputs.delete_found == 'yes'
         uses: actions-ecosystem/action-add-labels@v1
         with:
