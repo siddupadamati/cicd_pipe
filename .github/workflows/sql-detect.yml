@@ -18,21 +18,23 @@ jobs:
         run: |
           git fetch origin ${{ github.base_ref }}
 
-      - name: Detect changed SQL files
+      - name: Detect changed SQL
         id: scan
         run: |
-          # List changed SQL files between PR branch and base
+          # Fetch base branch (main or whatever PR targets)
+          git fetch origin ${{ github.base_ref }}
+      
+          # Compare PR branch changes to base branch
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -Ei '\.sql$' || true)
-
+      
           echo "Changed SQL files:"
           echo "$CHANGED"
-
+      
           if [ -z "$CHANGED" ]; then
             echo "delete_found=no" >> $GITHUB_OUTPUT
             exit 0
           fi
-
-          # Detect DELETE statements
+      
           if git diff origin/${{ github.base_ref }}...HEAD -- $CHANGED | grep -iq "delete"; then
             echo "delete_found=yes" >> $GITHUB_OUTPUT
           else
