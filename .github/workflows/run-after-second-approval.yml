@@ -1,0 +1,48 @@
+name: CI After Secondary Approval
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  run-ci:
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Load PR labels
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const labels = pr.data.labels.map(l => l.name);
+            core.setOutput("has_label", labels.includes("requires-secondary-approval"));
+
+      - name: Check required approvals
+        if: steps.pr.outputs.has_label == 'true'
+        id: check_approvals
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reviews = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const approved = reviews.data.filter(r => r.state === "APPROVED");
+
+            if (approved.length < 2) {
+              core.setFailed("Primary + secondary approval not yet complete.");
+            }
+
+      - name: Run CI
+        if: steps.check_approvals.outcome == 'success'
+        run: |
+          echo "Running CI pipeline because DELETE was detected and reviewers approved."
