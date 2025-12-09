@@ -15,7 +15,7 @@ jobs:
       - name: Scan SQL files for DELETE
         id: scan
         run: |
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }} | grep -Ei '\.sql$' || true)
+          CHANGED=$(git diff --name-only ${{ github.base_ref }} | grep -Ei '\.sql$' || true)
 
           if [ -z "$CHANGED" ]; then
             echo "delete_found=no" >> $GITHUB_OUTPUT
