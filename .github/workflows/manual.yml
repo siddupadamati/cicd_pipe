@@ -1,0 +1,35 @@
+name: SQL DELETE Detector
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  detect-delete:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan SQL files for DELETE
+        id: scan
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }} | grep -Ei '\.sql$' || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "delete_found=no" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if git diff origin/${{ github.base_ref }} -- $CHANGED | grep -i "delete"; then
+            echo "delete_found=yes" >> $GITHUB_OUTPUT
+          else
+            echo "delete_found=no" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Label PR if DELETE found
+        if: steps.scan.outputs.delete_found == 'yes'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: "requires-secondary-approval"
